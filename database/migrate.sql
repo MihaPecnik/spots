@@ -35,39 +35,34 @@ create or replace function get_spots_in_circle(radius integer,
                                                r_long numeric(10, 6))
     returns table
             (
-                spot_name     varchar,
-                spot_phone    varchar,
-                spot_domain   varchar,
-                spot_lat      numeric(10, 6),
-                spot_long     numeric(10, 6),
-                spot_distance integer
+                name     varchar,
+                phone    varchar,
+                domain   varchar,
+                lat      numeric(10, 6),
+                long     numeric(10, 6),
+                distance integer
             )
     language plpgsql
 as
 $$
-declare
-    var_r record;
 begin
-    for var_r in (
-        select *, ST_Distance(a.geolocation, point(r_long, r_lat)::geometry)::INTEGER as distance
+    return query
+        select a.name,
+               a.phone,
+               a.domain,
+               a.lat,
+               a.long,
+               (case
+                    when a.phone IS NOT NULL THEN
+                            ST_Distance(a.geolocation, point(r_long, r_lat)::geometry)::INTEGER / 2
+                    else
+                        ST_Distance(a.geolocation, point(r_long, r_lat)::geometry)::INTEGER
+                   end) as sdistance
         from spots a
-        WHERE ST_DWithin(geolocation,
+        WHERE ST_DWithin(a.geolocation,
                          point(r_long, r_lat)::geometry,
                          radius)
-    )
-        loop
-            if var_r.phone IS NOT NULL then
-                spot_distance := var_r.distance / 2;
-            else
-                spot_distance := var_r.distance;
-            end if;
-            spot_name := var_r.name;
-            spot_phone = var_r.phone;
-            spot_domain = var_r.domain;
-            spot_lat = var_r.lat;
-            spot_long = var_r.long;
-            return next;
-        end loop;
+        order by sdistance;
 end;
 $$;
 
@@ -77,42 +72,38 @@ create or replace function get_spots_in_square(radius integer,
                                                r_long numeric(10, 6))
     returns table
             (
-                spot_name     varchar,
-                spot_phone    varchar,
-                spot_domain   varchar,
-                spot_lat      numeric(10, 6),
-                spot_long     numeric(10, 6),
-                spot_distance integer
+                name     varchar,
+                phone    varchar,
+                domain   varchar,
+                lat      numeric(10, 6),
+                long     numeric(10, 6),
+                distance integer
             )
     language plpgsql
 as
 $$
-declare
-    var_r record;
 begin
-    for var_r in (select *
-                  from spots a
-                  WHERE (
-                            SELECT ST_Contains(ST_MakePolygon(ST_MakeLine(ARRAY [
-                                ST_Project(ST_Point(r_long, r_lat), radius * SQRT(2), radians(315.0)),
-                                ST_Project(ST_Point(r_long, r_lat), radius * SQRT(2), radians(45.0)),
-                                ST_Project(ST_Point(r_long, r_lat), radius * SQRT(2), radians(135.0)),
-                                ST_Project(ST_Point(r_long, r_lat), radius * SQRT(2), radians(225.0)),
-                                ST_Project(ST_Point(r_long, r_lat), radius * SQRT(2), radians(315.0))]::geometry[])),
-                                               a.geolocation::geometry))
-    )
-        loop
-            if var_r.phone IS NOT NULL THEN
-                spot_distance := ST_Distance(var_r.geolocation, point(r_long, r_lat)::geometry)::INTEGER / 2;
-            else
-                spot_distance := ST_Distance(var_r.geolocation, point(r_long, r_lat)::geometry)::INTEGER;
-            end if;
-            spot_name := var_r.name;
-            spot_phone = var_r.phone;
-            spot_domain = var_r.domain;
-            spot_lat = var_r.lat;
-            spot_long = var_r.long;
-            return next;
-        end loop;
+    return query
+        select a.name,
+               a.phone,
+               a.domain,
+               a.lat,
+               a.long,
+               (case
+                    when a.phone IS NOT NULL THEN
+                            ST_Distance(a.geolocation, point(r_long, r_lat)::geometry)::INTEGER / 2
+                    else
+                        ST_Distance(a.geolocation, point(r_long, r_lat)::geometry)::INTEGER
+                   end) as sdistance
+        from spots a
+        WHERE (
+                  SELECT ST_Contains(ST_MakePolygon(ST_MakeLine(ARRAY [
+                      ST_Project(ST_Point(r_long, r_lat), radius * SQRT(2), radians(315.0)),
+                      ST_Project(ST_Point(r_long, r_lat), radius * SQRT(2), radians(45.0)),
+                      ST_Project(ST_Point(r_long, r_lat), radius * SQRT(2), radians(135.0)),
+                      ST_Project(ST_Point(r_long, r_lat), radius * SQRT(2), radians(225.0)),
+                      ST_Project(ST_Point(r_long, r_lat), radius * SQRT(2), radians(315.0))]::geometry[])),
+                                     a.geolocation::geometry))
+        order by sdistance;
 end;
 $$;
